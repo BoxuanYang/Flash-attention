@@ -5,6 +5,7 @@
 #include <sys/time.h>
 #include <vector>
 #include <immintrin.h>
+#include <cmath>
 
 // Uncomment for ISPC
 //#include "module_ispc.h"
@@ -15,27 +16,31 @@
 // ------------------------------------ //
 
 // Step #1: Understand Read/Write Accessors for a 2D Tensor
-inline float twoDimRead(std::vector<float> &tensor, int &x, int &y, const int &sizeX) {
+inline float twoDimRead(std::vector<float> &tensor, int x, int y, const int sizeX) {
     // Note that sizeX is the size of a Row, not the number of rows
     return tensor[x * (sizeX)+ y];
 }
 
-inline void twoDimWrite(std::vector<float> &tensor, int &x, int &y, const int &sizeX, float &val) {
+inline void twoDimWrite(std::vector<float> &tensor, int x, int y, const int sizeX, float val) {
     tensor[x * (sizeX) + y] = val;
 }
 
 // Step #2: Implement Read/Write Accessors for a 4D Tensor
-inline float fourDimRead(std::vector<float> &tensor, int &x, int &y, int &z, int &b, 
+inline float fourDimRead(std::vector<float> &tensor, int x, int y, int z, int b, 
         const int &sizeX, const int &sizeY, const int &sizeZ) {
-    return 0.0;
+    // TODO
+    return tensor[x * (sizeX * sizeY + sizeY) + y * (sizeY * sizeZ) + z * (sizeZ) + b];
 }
 
-inline void fourDimWrite(std::vector<float> &tensor, int &x, int &y, int &z, int &b, 
-        const int &sizeX, const int &sizeY, const int &sizeZ, float &val) {
+inline void fourDimWrite(std::vector<float> &tensor, int x, int y, int z, int b, 
+        const int sizeX, const int sizeY, const int sizeZ, float val) {
+    // TODO
+    tensor[x * (sizeX * sizeY + sizeY) + y * (sizeY * sizeZ) + z * (sizeZ) + b] = val;
     return; 
 }
 
-// DO NOT EDIT THIS FUNCTION //
+// Transform a torch::Tensor into std::vector. 
+// DO NOT EDIT THIS FUNCTION
 std::vector<float> formatTensor(torch::Tensor tensor) {
     tensor = tensor.flatten();
     tensor = tensor.contiguous();
@@ -70,7 +75,6 @@ std::vector<float> formatTensor(torch::Tensor tensor) {
 // ---------------------------------------------------------- //
 //                  PART 1: NAIVE ATTENTION                   //
 // ---------------------------------------------------------- //
-
 torch::Tensor myNaiveAttention(torch::Tensor QTensor, torch::Tensor KTensor, torch::Tensor VTensor, torch::Tensor QK_tTensor,
                 int B, int H, int N, int d){
 
@@ -123,6 +127,69 @@ torch::Tensor myNaiveAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
     */
     
     // -------- YOUR CODE HERE  -------- //
+
+    // Loop through all batches and heads
+    for(int b = 0; b < B; b++){
+        for(int h = 0; h < H; h++){
+
+            // 1: Multiply Q, K^T and store in QK_t. Q, K are N by d in size.
+            for(int i = 0; i < N; i++){
+                for(int j = 0; j < N; j++){
+                    // compute QK_t[i][j]
+                    float QK_t_ij = 0;
+                    for(int k = 0; k < d; k++){
+                        // read Q[i][k]
+                        float Q_ik = fourDimRead(Q, b, h, i, k, H, N, d);
+
+                        // read K[j][k], i.e., K^T[k][j]
+                        float K_jk = fourDimRead(K, b, h, j, k, H, N, d);
+
+                        // Accumulate Q[i][k] * K[j][k] in QK_t
+                        QK_t_ij += Q_ik * K_jk;
+                    }
+                    twoDimWrite(QK_t, i, j, N, QK_t_ij);
+                }
+            }
+
+            // 2: Softmax Q K^T, in QK_t, QK_t is N by N in size
+            for(int i = 0; i < N; i++){
+                // 2.1: Transform i-th row of QK_t into exp and compute the norm
+                float row_i_norm = 0;
+                for(int j = 0; j < N; j++){ 
+                    float QK_t_ij = twoDimRead(QK_t, i, j, N);
+                    QK_t_ij = exp(QK_t_ij);
+                    twoDimWrite(QK_t, i, j, N, QK_t_ij);
+
+                    // Accumulate row norm in row_i_norm
+                    row_i_norm += QK_t_ij;
+                }
+
+                // 2.2: Divide i-th row by QK_t_i_sum
+                for(int j = 0; j < N; j++){ // divide by row sum
+                    float QK_t_ij = twoDimRead(QK_t, i, j, N);
+                    QK_t_ij = QK_t_ij / row_i_norm;
+                    twoDimWrite(QK_t, i, j, N, QK_t_ij);
+                }
+            }
+
+            // 3: Multiply Q K^T, V and store in O, O is in shape: (B, H, N, d)
+            for(int i = 0; i < N; i++){
+                for(int j = 0; j < d; j++){ 
+                    float O_ij= 0;
+                    for(int k = 0; k < N; k++){
+                        // read QK_t[i][k] from QK_t_ik
+                        float QK_t_ik = twoDimRead(QK_t, i, k, N);
+
+                        // read [k][j] from V
+                        float V_kj = fourDimRead(V, b, h, k, j, H, N, d);
+
+                        O_ij += QK_t_ik * V_kj;
+                    }
+                    fourDimWrite(O, b, h, i, j, H, N, d, O_ij);
+                }
+            }
+        }
+    }
     
     // DO NOT EDIT THIS RETURN STATEMENT //
     // It formats your C++ Vector O back into a Tensor of Shape (B, H, N, d) and returns it //
@@ -133,6 +200,51 @@ torch::Tensor myNaiveAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
 // ---------------------------------------------------------- //
 //     PART 2: BLOCKED MATRIX MULTIPLY AND UNFUSED SOFTMAX    //
 // ---------------------------------------------------------- //
+
+/*
+Compute Z = XY with blocked matrix multiply. X is M by d, Y is d by N.
+
+Size of L1 cache: 768 KiB
+Size of a cache line: 64 bytes(16 floats). 16 * 16 * 3 = 768 bytes < 768 KiB. Hence, block size B should be 16.
+*/
+inline void blocked_matmul(std::vector<float> &Z, std::vector<float> &X, std::vector<float> &Y, int M, int d, int N){
+    int blocksize = 16;
+    // Assume for simplicity that M, N, d are all multiples of blocksize
+
+    // Hint: min(tile_size, N-tileIndex*tileSize)
+    // helper function: int min_value = std::min(a, b);
+    // std::min(blocksize, () - () * blocksize)
+
+
+    // start row index of Z-block
+    for(int i = 0; i < M; i += blocksize){
+        // size of Z-block in rows
+        int Z_block_rows = std::min(blocksize, M - i);
+
+        // start col index of Z-block
+        for(int j = 0; j < N; j += blocksize){
+            // size of Z-block in cols
+            int Z_block_cols = std::min(blocksize, N - j);
+
+            // start index of X's blocks(row) and Y's block(col)
+            for(int k = 0; k < d; k += blocksize){
+                int d_size = std::min(blocksize, d - k);
+                // i-offset within block of Z 
+                for(int ii = 0; ii < Z_block_rows; ii++){
+                    // j-offset within block of Z
+                    for(int jj = 0; jj < Z_block_cols; jj++){
+                        // k-offset within block of X(row-wise) and Y(col-wise)
+                        for(int kk = 0; kk < d_size; kk++){
+                            // Z[i + ii][j + jj] = X[i + ii][kk] * Y[kk][j + jj]
+                            Z[(i + ii) * N + (j + jj)] += X[(i + ii) * d + (k + kk)] * Y[(k + kk) * N + (j + jj)];
+                        }
+                    }                  
+                }
+            }
+        }
+    }
+    return;
+}
 
 torch::Tensor myUnfusedAttentionBlocked(torch::Tensor QTensor, torch::Tensor KTensor, torch::Tensor VTensor, torch::Tensor QK_tTensor,
                 int B, int H, int N, int d){
@@ -152,7 +264,125 @@ torch::Tensor myUnfusedAttentionBlocked(torch::Tensor QTensor, torch::Tensor KTe
     //Format QK_t Tensor into a 2D vector.
     std::vector<float> QK_t = formatTensor(QK_tTensor);
 
+    int blocksize = 16;
+
     // -------- YOUR CODE HERE  -------- //
+
+    for(int b = 0; b < B; b++){
+        for(int h = 0; h < H; h++){
+
+        // 1: Multiply Q, K^T and store in QK_t. Q, K are N by d in size.
+
+        // start row index of Z-block
+        for(int i = 0; i < N; i += blocksize){
+            // size of Z-block in rows
+            int QK_t_block_rows = std::min(blocksize, N - i);
+            
+            // start col index of QK_t block
+            for(int j = 0; j < N; j += blocksize){
+                // size of QK_t block in cols
+                int QK_t_block_cols = blocksize < N - j ? blocksize : N - j; // std::min(blocksize, N - j);
+                
+                // start index of X's blocks(row) and Y's block(col)
+                for(int k = 0; k < d; k += blocksize){
+                    int d_size = blocksize < d - k ? blocksize : d - k;
+                    // i-offset within block of Z 
+                    for(int ii = 0; ii < QK_t_block_rows; ii++){
+                        // j-offset within block of Z
+                        for(int jj = 0; jj < QK_t_block_cols; jj++){
+                            float QK_t_i_ii_j_jj = twoDimRead(QK_t, i + ii, j + jj, N);
+                            
+                            // k-offset within block of X(row-wise) and Y(col-wise)
+                            for(int kk = 0; kk < d_size; kk++){
+                                
+                                // read Q[i + ii][k + kk]
+                                float Q_ik = fourDimRead(Q, b, h, i + ii, k + kk, H, N, d);
+
+                                // read K^T[k + kk][j + jj], i.e., K[j + jj][k + kk]
+                                float K_jk = fourDimRead(K, b, h, j + jj, k + kk, H, N, d);
+
+                                // Compute QK_t[i + ii][j + jj] += Q[i + ii][k + kk] * K^T[k + kk][j + jj]
+                                QK_t_i_ii_j_jj += Q_ik * K_jk;
+                            }
+                            
+                            twoDimWrite(QK_t, i + ii, j + jj, N, QK_t_i_ii_j_jj);
+                        }                  
+                    }
+                } 
+            }
+        }
+
+
+            // 2: Softmax Q K^T, in QK_t, QK_t is N by N in size
+            for(int i = 0; i < N; i++){
+                // 2.1: Transform i-th row of QK_t into exp and compute the norm
+                float row_i_norm = 0;
+                for(int j = 0; j < N; j++){ 
+                    float QK_t_ij = twoDimRead(QK_t, i, j, N);
+                    QK_t_ij = exp(QK_t_ij);
+                    twoDimWrite(QK_t, i, j, N, QK_t_ij);
+
+                    // Accumulate row norm in row_i_norm
+                    row_i_norm += QK_t_ij;
+                }
+
+                // 2.2: Divide i-th row by QK_t_i_sum
+                for(int j = 0; j < N; j++){ // divide by row sum
+                    float QK_t_ij = twoDimRead(QK_t, i, j, N);
+                    QK_t_ij = QK_t_ij / row_i_norm;
+                    twoDimWrite(QK_t, i, j, N, QK_t_ij);
+                }
+            }
+
+
+           // 3: Multiply QK_t, V and store in O, O is in shape: (B, H, N, d)
+
+           // start row index of O block
+           for(int i = 0; i < N; i += blocksize){
+            // size of O-block in rows
+            int O_block_rows = blocksize < N - i ? blocksize : N - i;
+            
+            // start col index of O block
+            for(int j = 0; j < d; j += blocksize){
+                // size of O block in cols
+                int O_block_cols = blocksize < d - j ? blocksize : d - j; // std::min(blocksize, N - j);
+                
+                // start index of QK_t's blocks(row) and V's block(col)
+                for(int k = 0; k < N; k += blocksize){
+                    int d_size = blocksize < N - k ? blocksize : N - k;
+                    // i-offset within block of O
+                    for(int ii = 0; ii < O_block_rows; ii++){
+                        // j-offset within block of O
+                        for(int jj = 0; jj < O_block_cols; jj++){
+                            // read O[i + ii][j + jj]
+                            float O_i_ii_j_jj = fourDimRead(O, b, h, i + ii, j + jj, H, N, d);
+                            
+                            // k-offset within block of QK_t(row-wise) and V(col-wise)
+                            for(int kk = 0; kk < d_size; kk++){
+                                // read QK_t[i + ii][k + kk] 
+                                float QK_t_ik = twoDimRead(QK_t, i + ii, k + kk, N);
+
+                                // read V[k + kk][j + jj]
+                                float V_jk = fourDimRead(V, b, h, k + kk, j + jj, H, N, d);
+
+                                // Compute O[i + ii][j + jj] += QK_t[i + ii][k + kk] * V[k + kk][j + jj]
+                                O_i_ii_j_jj += QK_t_ik * V_jk;
+                            }
+                            fourDimWrite(O, b, h, i + ii, j + jj, H, N, d, O_i_ii_j_jj);
+                        }                  
+                    }
+                } 
+            }
+        }
+        }
+    }
+
+
+
+
+
+
+
 
     // DO NOT EDIT THIS RETURN STATEMENT //
     // It formats your C++ Vector O back into a Tensor of Shape (B, H, N, d) and returns it //
@@ -188,18 +418,71 @@ torch::Tensor myFusedAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
     // -------- YOUR CODE HERE  -------- //
     // We give you a template of the first three loops for your convenience
     //loop over batch
+    #pragma omp parallel for collapse(3)
     for (int b = 0; b < B; b++){
 
         //loop over heads
         for (int h = 0; h < H; h++){
-            for (int i = 0; i < N ; i++){
 
-		// YRow is moved inside so each OpenMP thread gets a local copy.
+            for (int i = 0; i < N ; i++){
+                
+                // YRow is moved inside so each OpenMP thread gets a local copy.
                 at::Tensor ORowTensor = temp.index({torch::indexing::Slice(omp_get_thread_num(), torch::indexing::None)});      
                 std::vector<float> ORow = formatTensor(ORowTensor);
-		//YOUR CODE HERE
+
+                // a vector that stores Q[i][:] * K^T
+                std::vector<float> tmp_vec(N, 0.0f);
+
+                // 1. Multiply Q[i][:] with K^T to get a row, Q[i * d + j], ORow is of size d
+
+                // loop through all rows of K^T
+                for(int ii = 0; ii < d; ii++){
+                    // read Q[i][ii]
+                    float Q_i_ii = fourDimRead(Q, b, h, i, ii, H, N, d);
+                    
+                    // loop through all entries of ii-th row of K^T
+                    for(int j = 0; j < N; j++){
+
+                        // read K_t[ii][j], i.e., K[j][ii]
+                        float K_t_ii_j = fourDimRead(K, b, h, j, ii, H, N, d);
+
+                        // tmp_vec[j] += Q[i][ii] * K_t[ii][j]
+                        tmp_vec[j] += Q_i_ii * K_t_ii_j;
+                    }
+                }
+                // 2. Softmax the row COMPLETED
+                float sum = 0;
+                for(int j = 0; j < N; j++){
+                    tmp_vec[j] = exp(tmp_vec[j]);
+                    sum += tmp_vec[j];
+                }
+                for(int j = 0; j < N; j++){
+                    tmp_vec[j] = tmp_vec[j] / sum;
+                }
+
+                // 3. Multiply the softmax'd row with V to get ORow and write back to O
+                
+                // loop through all rows of V
+                for(int  ii = 0; ii < N; ii++){
+                    // loop through all entries of ii-th row of V
+                    for(int j = 0; j < d; j++){
+                        // read V[ii][j]
+                        float V_ii_j = fourDimRead(V, b, h, ii, j, H, N, d);
+
+                        // read O[i][j]
+                        float O_i_j = fourDimRead(O, b, h, i, j, H, N, d);
+
+                        // O[i][j] += ORow[j] * V[ii][j]
+                        O_i_j += tmp_vec[ii] * V_ii_j;
+
+                        // write back to O
+                        fourDimWrite(O, b, h, i, j, H, N, d, O_i_j); 
+                    }
+                }
+                //YOUR CODE HERE
+                
             }
-	}
+        }
     }
 	    
 	
