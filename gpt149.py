@@ -106,9 +106,9 @@ def createQKVSimple(N,d,B,H):
         for h in range(H):
             for i in range(N):
                 for j in range(d):
-                    Q[b][h][i][j] = 0.0002 * i + 0.0001 * j
-                    K[b][h][j][i] = 0.0006 * i + 0.0003 * j
-                    V[b][h][i][j] = 0.00015 * i + 0.0008 * j
+                    Q[b][h][i][j] = 0.0002 * i + 0.0001 * j #0.2 * i + 0.1 * j  # 0.0002 * i + 0.0001 * j
+                    K[b][h][j][i] = 0.0006 * i + 0.0003 * j #0.6 * i + 0.3 * j # 0.0006 * i + 0.0003 * j
+                    V[b][h][i][j] = 0.00015 * i + 0.0008 * j #0.15 * i + 0.8 * j # 0.00015 * i + 0.0008 * j
     K=K.transpose(-2,-1)
     return Q,K,V
 
@@ -261,7 +261,7 @@ def accessTest(B, H, N, d):
     
 def main():
 
-    d=32
+    d=32 ## original: 32
     B=1
     H=4
     
