@@ -1,18 +1,11 @@
-# Assignment 4: NanoGPT149
-
-**Due Monday Dec 4, 11:59pm PST**
-
-**100 points total + 12 Points EC**
+# Flash Attention
 
 ## Overview 
 
+This is my personal implementation of the famous [flash attention](https://arxiv.org/abs/2205.14135) paper. This implementation will be used as a part of [NanoGPT](https://github.com/karpathy/nanoGPT) model to generate Shaespere-like text.
+
 In this assignment, you will implement and optimize the key components of a transformer-based deep neural network that synthesizes Shakespeare text. While the DNN you will work with is a fairly small model, the basic components of the model are the same as those featured in large-language models (LLMs) that form the basis of technologies like ChatGPT today. Specifically, you will implement the attention layer of this model in C++, focusing on optimizations that improve arithmetic intensity, reduce memory footprint, and utilize multi-core and potentially SIMD parallelism on the CPU. Your implementation will then be used as part of a complete [NanoGPT](https://github.com/karpathy/nanoGPT) model that you can run to produce novel Shakespeare-like text.
 
-Overall, this assignment will:
-
- * Give you experience with the low-level details of implementing DNN layers. In other words, the "guts" of vendor libraries like NVIDIA's CuDNN or Intel's One API.
-   
- * Show the value of key locality-perserving optimizations like loop blocking and loop fusion.
 
 ## Environment Setup
 
