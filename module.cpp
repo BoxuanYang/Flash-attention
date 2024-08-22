@@ -529,7 +529,7 @@ torch::Tensor myFlashAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
     int Tr = (N + Br - 1) / Br;
     // The number of blocks among cols(K)
     int Tc = (N + Bc - 1) / Bc;
-    printf("Bc: %d, Br: %d\n", Bc, Br);
+    //printf("Bc: %d, Br: %d\n", Bc, Br);
 
     for(int b = 0; b < B; b++){
         for(int h = 0; h < H; h++){

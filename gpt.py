@@ -21,7 +21,7 @@ if not path.exists(ispc_path): ispc_path = ""
 
 print("\nCompiling code into a PyTorch module...\n\n")
 mr = load(name="custom_module", sources=["module.cpp"],  extra_cflags=["-mavx", "-O3", "-fopenmp"], extra_ldflags=[ispc_path])
-correctness_error_message = "\n-------------------------------------------\n YOUR ATTENTION PRODUCED INCORRECT RESULTS"
+correctness_error_message = "\n-------------------------------------------\n ATTENTION PRODUCED INCORRECT RESULTS"
 
 class CustomAttention(nn.Module):
     def __init__(self, Q,K,V, B, H, N, d, isRef=False, bc=256, br=256):
