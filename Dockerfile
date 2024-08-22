@@ -23,11 +23,3 @@ RUN apt-get install ninja-build -y
 # 运行这个docker，只需要执行如下命令：
 #docker build -t boxuan-flash-attention .
 #docker run -it boxuan-flash-attention
-
-
-# apt-get update
-# apt-get install libcunit1 libcunit1-doc libcunit1-dev python3-dev  
-
-
-
-
