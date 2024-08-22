@@ -8,7 +8,9 @@ In this project, I implemented and optimized the key components of a transformer
 matrix multiuplication as well as flash attention to generate Shakespeare-like text.
 
 
-## Docker Setup
+## Environment Setup
+
+### Docker
 
 It is recommended to run this project in docker environment. To run the docker container, first build the docker image:
 
@@ -18,7 +20,7 @@ Then, run the docker container:
 
     docker run -it boxuan-flash-attention
 
-
+### Run the program
 
 Run the command below to run inference using a model trained by the [Stanford](https://gfxcourses.stanford.edu/cs149/fall23) staff. You will see some randomly generated Shakespeare text.
 
